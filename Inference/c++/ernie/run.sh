@@ -20,8 +20,8 @@ else
   export CUDA_VISIBLE_DEVICES="${gpu_id}"
 fi
 
-MODEL_DIR=/work/inference/ernie/model
-DATA_FILE=/work/inference/ernie/seq128_data/test_ds
+MODEL_DIR=/data/models/Ernie_INT8
+DATA_FILE=/data/datasets/Ernie/seq128_data/test_ds
 REPEAT=1
 
 if [ $# -ge 3 ]; then
@@ -32,12 +32,12 @@ if [ $# -ge 4 ]; then
   DATA_FILE=$4
 fi
 
-profile=false
+profile=true
 if [ $# -ge 5 ]; then
   profile=$5
 fi
 
-print_outputs=false
+print_outputs=true
 if [ $# -ge 6 ]; then
   print_outputs=$6
 fi
