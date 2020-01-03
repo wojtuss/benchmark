@@ -24,7 +24,6 @@
 #include <string>
 #include <vector>
 
-
 #ifdef ENABLE_PADDLE_PROFILER
 #include <paddle/fluid/platform/profiler.h>
 DECLARE_bool(profile);
@@ -32,7 +31,7 @@ DECLARE_bool(profile);
 
 DEFINE_string(model_dir, "", "model directory");
 DEFINE_string(data, "", "input data path");
-DEFINE_string(label,"", "label path" );
+DEFINE_string(label, "", "label path");
 DEFINE_int32(repeat, 1, "repeat");
 DEFINE_bool(output_prediction, false,
             "Whether to output the prediction results.");
@@ -221,20 +220,23 @@ bool LoadLabels(std::vector<int> *labels) {
   std::ifstream labelFile(FLAGS_label);
   int label;
   while (labelFile >> label) {
-   labels->push_back(label);
+    labels->push_back(label);
   }
   labelFile.close();
   return true;
 }
 
-void CalculateAccuracy(const std::vector<paddle::PaddleTensor> &fetch, 
-                       std::vector<float> *out, int label, int *correct){
+bool CalculateAccuracy(const std::vector<paddle::PaddleTensor> &fetch,
+                       std::vector<float> *out, int label, int *correct) {
   out->push_back(static_cast<float *>(fetch[0].data.data())[0]);
   out->push_back(static_cast<float *>(fetch[0].data.data())[1]);
   out->push_back(static_cast<float *>(fetch[0].data.data())[2]);
-  if((std::max_element(out->begin(), out->end()) - out->begin()) == label)
+  if ((std::max_element(out->begin(), out->end()) - out->begin()) == label) {
     (*correct)++;
-  return;
+    return true;
+  } else {
+    return false;
+  }
 }
 
 // Bert inference demo
@@ -266,6 +268,7 @@ int main(int argc, char *argv[]) {
   if (FLAGS_use_int8) {
     std::cout << "--- use int8 ---" << std::endl;
     config.pass_builder()->AppendPass("fc_mkldnn_pass");
+    config.pass_builder()->AppendPass("mkldnn_placement_pass");
   } else {
     std::cout << "--- use fp32 ---" << std::endl;
   }
@@ -299,10 +302,10 @@ int main(int argc, char *argv[]) {
     LOG(ERROR) << "load input data error!";
     return -1;
   }
- std::vector<int> labels;
-  if(!LoadLabels(&labels)) {
-    LOG(ERROR)<<"load label error!";
-    return-1;
+  std::vector<int> labels;
+  if (!LoadLabels(&labels)) {
+    LOG(ERROR) << "load label error!";
+    return -1;
   }
 
 #ifdef ENABLE_PADDLE_PROFILER
@@ -327,6 +330,7 @@ int main(int argc, char *argv[]) {
   int num_samples{0};
   int count{0};
   int correct{0};
+  int prev_correct{0};
   for (int i = 0; i < 100; i++) { // warm up
     predictor->Run(inputs[0], &fetch);
   }
@@ -336,7 +340,6 @@ int main(int argc, char *argv[]) {
         break;
       fetch.clear();
       out.clear();
-      std::cout << "--- iteration " << id << " ---" << std::endl;
       auto start = std::chrono::system_clock::now();
       predictor->Run(inputs[id], &fetch);
       auto end = std::chrono::system_clock::now();
@@ -348,14 +351,21 @@ int main(int argc, char *argv[]) {
         total_time +=
             std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
                 .count();
+        prev_correct = correct;
         CalculateAccuracy(fetch, &out, labels[id], &correct);
         // num_samples += fetch.front().data.length() / 2 / sizeof(float);
         // num_samples += fetch.front().data.length() / (sizeof(float) * 3);
         num_samples++;
+        std::cout << "--- iteration " << id << ", label: " << labels[id]
+                  << ", correct: " << correct - prev_correct << " ---"
+                  << std::endl;
+      } else {
+        LOG(ERROR) << "Fetch variables are empty for input id " << id << " !";
+        return -1;
       }
     }
-     LOG(INFO) << " --- repeat " << i << " --- "
-              << " avg accuracy = "<< correct / ((num_samples)*1.0f) ;
+    LOG(INFO) << " --- repeat " << i << " --- "
+              << " avg accuracy = " << correct / ((num_samples)*1.0f);
     sum_accuracy += correct / ((num_samples)*1.0f);
   }
 
@@ -373,9 +383,9 @@ int main(int argc, char *argv[]) {
             << " samples, average latency: " << per_sample_ms
             << "ms per sample.";
   LOG(INFO) << count;
-  LOG(INFO) << "AVG accuracy summary " 
-            << (FLAGS_use_int8 ? "INT8:  ": "FP32:  ")  
-            << sum_accuracy / FLAGS_repeat*1.0f;
+  LOG(INFO) << "AVG accuracy summary "
+            << (FLAGS_use_int8 ? "INT8:  " : "FP32:  ")
+            << sum_accuracy / FLAGS_repeat * 1.0f;
 
   return 0;
 }
