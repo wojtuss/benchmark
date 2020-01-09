@@ -1,20 +1,18 @@
 #!/bin/sh
 
-# build_dir=build_release
-# build_dir=build_release_develop
-# build_dir=build_release_3d-fc_1.1
-build_dir=build_release_fc-int8-squash-1.1.1
-# build_dir=build_release_old
+paddle_dir=/data/wojtuss/repos/PaddlePaddle/Paddle
+build_dir=build_release
+build_threads=14
 build_type=Release
 
-export PYTHONPATH=/data/wojtuss/repos/PaddlePaddle/Paddle/${build_dir}/python:/data/wojtuss/repos/PaddlePaddle/Paddle/${build_dir}/paddle
+export PYTHONPATH=${paddle_dir}/${build_dir}/python:${paddle_dir}/${build_dir}/paddle
 
 rm -r paddle
-cp /data/wojtuss/repos/PaddlePaddle/Paddle/paddle/ . -r
-cp /data/wojtuss/repos/PaddlePaddle/Paddle/${build_dir}/paddle/fluid/platform/profiler* paddle/fluid/platform/
+cp ${paddle_dir}/paddle/ . -r
+cp ${paddle_dir}/${build_dir}/paddle/fluid/platform/profiler* paddle/fluid/platform/
 
+mkdir ${build_dir} -p
 cd ${build_dir} && rm -r *
-cmake -DUSE_GPU=OFF -DPADDLE_ROOT=/data/wojtuss/repos/PaddlePaddle/Paddle/${build_dir}/fluid_install_dir -DCMAKE_BUILD_TYPE=${build_type} -DUSE_PROFILER=ON ..
-make -j14
-
+cmake -DUSE_GPU=OFF -DPADDLE_ROOT=${paddle_dir}/${build_dir}/fluid_install_dir -DCMAKE_BUILD_TYPE=${build_type} -DUSE_PROFILER=ON ..
+make -j${build_threads}
 cd -
